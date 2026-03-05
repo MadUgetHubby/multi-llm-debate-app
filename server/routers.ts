@@ -13,6 +13,7 @@ import {
   createOrUpdateDebateSettings,
 } from "./db";
 import { runMultiAgentDebate, DEFAULT_AGENTS } from "./debateOrchestrator";
+import { sendDebateCompletionEmail } from "./emailNotifications";
 
 export const appRouter = router({
   system: systemRouter,
@@ -45,9 +46,27 @@ export const appRouter = router({
           // Start the debate asynchronously
           runMultiAgentDebate(debateId, input.inquiry, input.numberOfRounds, DEFAULT_AGENTS, (progress) => {
             console.log(`[Debate ${debateId}] ${progress}`);
-          }).catch((error) => {
-            console.error(`[Debate ${debateId}] Error:`, error);
-          });
+          })
+            .then(async () => {
+              // Send email notification after debate completes
+              const debate = await getDebateById(debateId);
+              if (debate && ctx.user.email) {
+                const settings = await getUserDebateSettings(ctx.user.id);
+                if (settings?.enableEmailNotifications) {
+                  await sendDebateCompletionEmail(
+                    ctx.user.email,
+                    ctx.user.name || "User",
+                    debateId,
+                    input.inquiry,
+                    debate.finalSynthesis || "",
+                    input.numberOfRounds
+                  );
+                }
+              }
+            })
+            .catch((error) => {
+              console.error(`[Debate ${debateId}] Error:`, error);
+            });
 
           return {
             debateId,
@@ -72,10 +91,52 @@ export const appRouter = router({
         return debate;
       }),
 
-    // Get all debates for the current user
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return await getUserDebates(ctx.user.id);
-    }),
+    // Get all debates for the current user with optional filtering
+    list: protectedProcedure
+      .input(
+        z.object({
+          search: z.string().optional(),
+          complexity: z.enum(["simple", "moderate", "complex"]).optional(),
+          startDate: z.date().optional(),
+          endDate: z.date().optional(),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        let debates = await getUserDebates(ctx.user.id);
+
+        // Filter by search query
+        if (input.search) {
+          const searchLower = input.search.toLowerCase();
+          debates = debates.filter(
+            (d) =>
+              d.inquiry.toLowerCase().includes(searchLower) ||
+              d.topic?.toLowerCase().includes(searchLower)
+          );
+        }
+
+        // Filter by date range
+        if (input.startDate) {
+          debates = debates.filter((d) => new Date(d.createdAt) >= input.startDate!);
+        }
+        if (input.endDate) {
+          debates = debates.filter((d) => new Date(d.createdAt) <= input.endDate!);
+        }
+
+        // Filter by complexity (requires metrics)
+        if (input.complexity) {
+          const debatesWithMetrics = await Promise.all(
+            debates.map(async (d) => {
+              const metrics = await getDebateMetrics(d.id);
+              return { debate: d, complexity: metrics?.debateComplexity };
+            })
+          );
+          debates = debatesWithMetrics
+            .filter((dm) => dm.complexity === input.complexity)
+            .map((dm) => dm.debate);
+        }
+
+        return debates;
+      }),
 
     // Get debate messages/transcript
     getMessages: protectedProcedure
@@ -119,6 +180,39 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         await createOrUpdateDebateSettings(ctx.user.id, input);
         return { success: true };
+      }),
+
+    // Compare two debates side-by-side
+    compare: protectedProcedure
+      .input(
+        z.object({
+          debateId1: z.number(),
+          debateId2: z.number(),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        const debate1 = await getDebateById(input.debateId1);
+        const debate2 = await getDebateById(input.debateId2);
+
+        // Verify user owns both debates
+        if (
+          !debate1 ||
+          !debate2 ||
+          debate1.userId !== ctx.user.id ||
+          debate2.userId !== ctx.user.id
+        ) {
+          throw new Error("Access denied or debates not found");
+        }
+
+        const messages1 = await getDebateMessages(input.debateId1);
+        const messages2 = await getDebateMessages(input.debateId2);
+        const metrics1 = await getDebateMetrics(input.debateId1);
+        const metrics2 = await getDebateMetrics(input.debateId2);
+
+        return {
+          debate1: { ...debate1, messages: messages1, metrics: metrics1 },
+          debate2: { ...debate2, messages: messages2, metrics: metrics2 },
+        };
       }),
   }),
 });

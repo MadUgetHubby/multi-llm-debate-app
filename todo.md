@@ -55,3 +55,28 @@
 - Real-time debate visualization with agent personas
 - Metrics calculation and display
 - Export functionality for debate transcripts
+
+
+## Phase 7: Email Notifications Feature
+- [x] Create email notification helper function
+- [x] Integrate email service (Manus built-in notification API)
+- [x] Send email when debate completes
+- [x] Add email preference settings to user settings
+- [x] Test email notifications
+
+## Phase 8: Advanced Search & Filtering
+- [x] Add search query input to history page
+- [x] Implement full-text search on inquiry field
+- [x] Add date range filter
+- [x] Add complexity filter (simple/moderate/complex)
+- [x] Add topic/tag field to debates table
+- [x] Implement topic-based filtering
+- [x] Test search and filtering functionality
+
+## Phase 9: Debate Comparison Feature
+- [x] Add comparison mode to history page
+- [x] Create comparison view component
+- [x] Display debates side-by-side
+- [x] Show metrics comparison
+- [x] Compare final synthesis answers
+- [x] Test comparison functionality
