@@ -14,7 +14,7 @@ import { Loader2, Zap, Brain, AlertCircle } from "lucide-react";
 import { getLoginUrl } from "@/const";
 
 export default function Home() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [inquiry, setInquiry] = useState("");
   const [numberOfRounds, setNumberOfRounds] = useState([2]);
@@ -48,6 +48,19 @@ export default function Home() {
     });
   };
 
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login page for unauthenticated users
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex flex-col">
@@ -119,6 +132,7 @@ export default function Home() {
     );
   }
 
+  // Show authenticated user interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
